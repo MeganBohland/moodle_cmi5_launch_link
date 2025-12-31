@@ -335,6 +335,7 @@ try {
             $auinfo[] = (" ");
         }
         */
+
         $grade = floatval($au->grade);
 
         // TODO - This needs to be more interactive, course creators need to be able top control

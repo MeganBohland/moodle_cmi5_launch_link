@@ -383,6 +383,7 @@ class progress {
                 if (array_key_exists("score", $resultinfo)) {
 
                     $score = $resultarray[$registrationid][0]["result"]["score"];
+                    
                     // Raw score preferred to scaled.
                     if (array_key_exists("raw", $score)) {
 
@@ -392,9 +393,20 @@ class progress {
 
                     } else if (array_key_exists("scaled", $score))  {
 
-                        $returnscore = round($score["scaled"], 2);
+                      //  $returnscore = round($score["scaled"], 2);
+
+                        // Return the scaled score in a more people friendly way:
+                        // This prevents scaled from appearing in Moodle progress.
+                        if (isset($score['scaled']) && isset($score['max'])) {
+                            return round($score['scaled'] * $score['max'], 2);
+                        }
+
+                        if (isset($score['scaled'])) {
+                            return round($score['scaled'], 2);
+                        }
 
                         return $returnscore;
+
                     }
                 } else {
 

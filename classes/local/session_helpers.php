@@ -107,13 +107,15 @@ class session_helpers {
                     $key = mb_convert_case($key, MB_CASE_LOWER, "UTF-8");
                 }
 
+
+                    
                 if (property_exists($session, $key) && $key != 'id' && $key != 'sessionid') {
 
                     // If it's an array, encode it so it can be saved to DB.
                     if (is_array($value)) {
                         $value = json_encode($value);
                     }
-
+                    
                     if (is_string($key)) {
                         $key = mb_convert_case($key, MB_CASE_LOWER, "UTF-8");
                     }
@@ -159,6 +161,7 @@ class session_helpers {
 
         // Put a try here to catch if anything goes wrong.
         try {
+           
 
             $table = "cmi5launch_sessions";
 

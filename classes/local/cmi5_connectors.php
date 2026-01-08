@@ -510,6 +510,7 @@ class cmi5_connectors {
                     'http' => [
                         'method' => 'POST',
                         'ignore_errors' => true,
+                        'timeout' => 600,
                         'header' => [
                             "Authorization: Bearer " . $token,
                             "Content-Type: " . $contenttype .
@@ -650,6 +651,11 @@ class cmi5_connectors {
             throw new playerException($errormessage);
         }
         else if( array_key_exists("statusCode", $resulttest) && $resulttest["statusCode"] != 200) {
+
+            echo("Lets see if we can get EVERYTHING back");
+            echo"<br>";
+            var_dump($resulttest);
+            echo"<br>";
 
             $errormessage = $type . get_string('cmi5launchreturned', 'cmi5launch'). $resulttest["statusCode"] . get_string('cmi5launchwith', 'cmi5launch') . " '"
             . $resulttest["message"] . "'.";

@@ -90,7 +90,9 @@ if (has_capability('mod/cmi5launch:viewgrades', $context)) {
     foreach ($users as $user) {
 
         // Call updategrades to ensure all grades are up to date before view.
-        cmi5launch_update_grades($cm, $user->id);
+        // Must pass $cmi5launch (instance), not $cm (course module) — passing $cm would use $cm->id
+        // as the grade item instance, creating a duplicate grade item in the gradebook.
+        cmi5launch_update_grades($cmi5launch, $user->id);
     }
 
     // If the logged in user has an id pass that along, as they may have grades to view as well.

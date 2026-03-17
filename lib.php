@@ -724,6 +724,103 @@ function cmi5launch_settings($instance) {
 // Grade functions.
 
 /**
+ * Called when grademethod admin setting changes.
+ * Recalculates grades for all enrolled users across all cmi5launch instances
+ * using stored session scores (no LRS/player API calls) and pushes the result
+ * directly to Moodle's gradebook so the native grader reflects the change immediately.
+ */
+function cmi5launch_grade_item_force_regrading() {
+    global $DB, $CFG, $cmi5launchsettings;
+
+    require_once($CFG->libdir . '/gradelib.php');
+
+    // Reset the settings cache so cmi5launch_settings() re-reads the newly saved grademethod.
+    $cmi5launchsettings = null;
+
+    $instances = $DB->get_records('cmi5launch');
+    foreach ($instances as $instance) {
+
+        // Read fresh settings (including the new grademethod).
+        $settings  = cmi5launch_settings($instance->id);
+        $gradetype = (int)$settings['grademethod'];
+
+        // Need the course module to enumerate enrolled users.
+        $cm = get_coursemodule_from_instance('cmi5launch', $instance->id, $instance->course,
+            false, IGNORE_MISSING);
+        if (!$cm) {
+            continue;
+        }
+        $context = context_module::instance($cm->id);
+        $users   = get_enrolled_users($context);
+
+        foreach ($users as $user) {
+
+            // Stored session scores live in cmi5launch_usercourse.ausgrades — no LRS call needed.
+            $usercourse = $DB->get_record('cmi5launch_usercourse',
+                ['courseid' => $instance->courseid, 'userid' => $user->id]);
+            if (!$usercourse || empty($usercourse->ausgrades)) {
+                continue;
+            }
+
+            $ausgrades = json_decode($usercourse->ausgrades, true);
+            if (empty($ausgrades)) {
+                continue;
+            }
+
+            // For each AU, apply grademethod to its session scores to get an AU grade.
+            $augrades = [];
+            foreach ($ausgrades as $lmsid => $audata) {
+                foreach ($audata as $title => $scoresjson) {
+                    $scores = json_decode($scoresjson, true);
+                    if (empty($scores) || !is_array($scores)) {
+                        continue;
+                    }
+                    $scores = array_filter($scores, 'is_numeric');
+                    if (empty($scores)) {
+                        continue;
+                    }
+                    switch ($gradetype) {
+                        case 1:
+                            $augrades[] = (float)max($scores);
+                            break;
+                        case 2:
+                            $augrades[] = (float)(array_sum($scores) / count($scores));
+                            break;
+                    }
+                }
+            }
+
+            if (empty($augrades)) {
+                continue;
+            }
+
+            // Apply grademethod across AU grades to get the overall course grade.
+            switch ($gradetype) {
+                case 1:
+                    $overallgrade = max($augrades);
+                    break;
+                case 2:
+                    $overallgrade = array_sum($augrades) / count($augrades);
+                    break;
+                default:
+                    continue 2;
+            }
+
+            // Push the recalculated grade directly to Moodle's gradebook.
+            $grade           = new stdClass();
+            $grade->userid   = $user->id;
+            $grade->rawgrade = round((float)$overallgrade, 2);
+
+            grade_update('mod/cmi5launch', $instance->course, 'mod', 'cmi5launch',
+                $instance->id, 0, $grade);
+        }
+
+        // Reset cache between instances so each gets its own fresh settings lookup.
+        $cmi5launchsettings = null;
+    }
+}
+
+/**
  * Return grade for given user or all users.
  * @param stdClass $cmi5launch The Cmi5 mod instance object.
  * @param int $userid Optional user id, 0 means all users.
@@ -738,8 +835,10 @@ function cmi5launch_get_user_grades($cmi5launch, $userid=0) {
 
     global $CFG, $DB;
 
-    $id = required_param('id', PARAM_INT);
-    $contextmodule = context_module::instance($id);
+    // Derive the course module from the instance so this function works when called
+    // by Moodle's gradebook framework (which has no 'id' URL param).
+    $cm = get_coursemodule_from_instance('cmi5launch', $cmi5launch->id, $cmi5launch->course, false, MUST_EXIST);
+    $contextmodule = context_module::instance($cm->id);
 
     $grades = [];
 
@@ -796,11 +895,10 @@ function cmi5launch_update_grades($cmi5launch, $userid = 0, $nullifnone = true) 
 
     require_once($CFG->libdir . '/gradelib.php');
     require_once($CFG->libdir . '/completionlib.php');
-    $id = required_param('id', PARAM_INT);
 
-    // Reload cmi5 course instance.
-    $record = $DB->get_record('cmi5launch', ['id' => $cmi5launch->id]);
-    $cm = get_coursemodule_from_id('cmi5launch', $id, 0, false, MUST_EXIST);
+    // Derive the course module from the instance so this function works when called
+    // by Moodle's gradebook framework (which has no 'id' URL param).
+    $cm = get_coursemodule_from_instance('cmi5launch', $cmi5launch->id, $cmi5launch->course, false, MUST_EXIST);
     $contextmodule = context_module::instance($cm->id);
     $users = get_enrolled_users($contextmodule);
 
@@ -825,7 +923,17 @@ function cmi5launch_update_grades($cmi5launch, $userid = 0, $nullifnone = true) 
 
     } else {
 
-        cmi5launch_grade_item_update($cmi5launch);
+        // Update grades for all enrolled users.
+        if ($users) {
+            foreach ($users as $user) {
+                $grades = cmi5launch_get_user_grades($cmi5launch, $user->id);
+                if ($grades && isset($grades[$user->id])) {
+                    cmi5launch_grade_item_update($cmi5launch, $grades[$user->id]);
+                }
+            }
+        } else {
+            cmi5launch_grade_item_update($cmi5launch);
+        }
     }
 }
 
@@ -875,14 +983,17 @@ function cmi5launch_grade_item_update($cmi5launch, $grades = null) {
     $params['grademax'] = $maxgrade;
     $params['grademin'] = 0;
 
-    // If there's a max grade, set it.
+    // Always use GRADE_TYPE_VALUE (1) for the Moodle grade item type.
+    // $gradetype is the CMI5 grade method (1=highest, 2=average) — NOT a Moodle grade type constant.
+    // Passing $gradetype directly would cause average (=2) to create a GRADE_TYPE_SCALE item,
+    // which cannot store float scores and shows 'error' in the gradebook.
     if ($maxgrade) {
-        $params['gradetype'] = $gradetype;
+        $params['gradetype'] = GRADE_TYPE_VALUE;
         $params['grademax'] = $maxgrade;
         $params['grademin'] = 0;
     } else {
 
-        $params['gradetype'] = $gradetype;
+        $params['gradetype'] = GRADE_TYPE_VALUE;
     }
 
     // Check if it's call to reset.

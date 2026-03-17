@@ -253,22 +253,21 @@ class grade_helpers {
 
             } else {
 
-                $nograde = [0 => get_string('cmi5launchnogradeerror', 'cmi5launch')];
-                // Do nothing, there is no record for this user in this course.
+                // No record for this user in this course yet, return null (no grade).
                 // Restore default hadlers.
                 restore_exception_handler();
                 restore_error_handler();
-                return $nograde;
+                return null;
 
             }
         } catch (\Throwable $e) {
 
-            // If there is an error, return the error.
+            // If there is an error, log it and return null so gradebook is not set to error.
             echo(get_string('cmi5launchgradeerror', 'cmi5launch') . $e->getMessage());
             // Restore default hadlers.
             restore_exception_handler();
             restore_error_handler();
-            return $e;
+            return null;
         }
     }
 
@@ -297,6 +296,10 @@ class grade_helpers {
         // Array to hold AU scores.
         $auscores = [];
         $overallgrade = [];
+        // Collect all AU grades to compute overall.
+        $augrades = [];
+        // Determine gradetype once outside the loop.
+        $gradetype = $cmi5launchsettings["grademethod"];
         try {
             // Bring in functions and classes.
             $sessionhelper = $sessionhelpers;
@@ -354,9 +357,7 @@ class grade_helpers {
                         // Save the session scores to AU, it is ok to overwrite.
                         $aurecord->scores = json_encode($sessiongrades, JSON_NUMERIC_CHECK);
 
-                        // Determine gradetype and use it to save overall grade to AU.
-                        $gradetype = $cmi5launchsettings["grademethod"];
-
+                        // Use gradetype (set outside loop) to save overall grade to AU.
                         switch ($gradetype) {
 
                             // GRADE_AUS_CMI5 = 0.
@@ -378,14 +379,28 @@ class grade_helpers {
                         // Save AU scores to corresponding title.
                         $auscores[$aurecord->lmsid] = [$aurecord->title => $aurecord->scores];
 
-                        // Save an overall grade \to be passed out to grade_update.
-                        $overallgrade = $aurecord->grade;
+                        // Collect this AU's grade to compute overall after all AUs are processed.
+                        $augrades[] = $aurecord->grade;
 
                         // Save Au title and their scores to AU.
                         // Save updates to DB.
                         $aurecord = $DB->update_record('cmi5launch_aus', $aurecord);
 
                     }
+                }
+            }
+
+            // Compute overall grade across all AUs using the grade method.
+            if (!empty($augrades)) {
+                switch ($gradetype) {
+                    case 1:
+                        $overallgrade = $this->cmi5launch_highest_grade($augrades);
+                        break;
+                    case 2:
+                        $overallgrade = $this->cmi5launch_average_grade($augrades);
+                        break;
+                    default:
+                        $overallgrade = 0;
                 }
             }
 

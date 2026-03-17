@@ -429,8 +429,10 @@ $string['cmi5launchscore'] = 'Score';
 $string['cmi5launchsessionaucompleted'] = 'Completed';
 $string['cmi5launchsessionaucompletedpassed'] = 'Completed and Passed';
 $string['cmi5launchsessionaucompletedfailed'] = 'Completed and Failed';
+$string['cmi5launchsessiongradeaus'] = 'AU';
 $string['cmi5launchsessiongradehigh'] = 'Highest';
 $string['cmi5launchsessiongradeaverage'] = 'Average';
+$string['cmi5launchsessiongradesum'] = 'Sum';
 
 // For view.php.
 $string['cmi5launchviewcourseerror'] = 'Creating or retrieving user course record. Contact your system administrator with error: ';

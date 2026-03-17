@@ -144,8 +144,9 @@ if (has_capability('mod/cmi5launch:viewgrades', $context)) {
 
     foreach ($users as $user) {
 
-        // Call updategrades to ensure all grades are up to date before view.
-        $updategrades($user);
+        // Call updategrades to ensure all grades are up to date before view,
+        // and push the updated grade to Moodle's gradebook.
+        cmi5launch_update_grades($cmi5launch, $user->id);
 
         // Each user needs their own column.
         $headers[] = $user->username;
@@ -161,8 +162,8 @@ if (has_capability('mod/cmi5launch:viewgrades', $context)) {
     // Retrieve that user from DB.
     $user = $DB->get_record('user', ['id' => $USER->id]);
 
-    // Make sure their grades are up to date.
-    $updategrades($user);
+    // Make sure their grades are up to date and push to Moodle's gradebook.
+    cmi5launch_update_grades($cmi5launch, $user->id);
     // Add user to array for processing, the table build expects an array of users with their id as their index.
     $users[$user->id] = $user;
 

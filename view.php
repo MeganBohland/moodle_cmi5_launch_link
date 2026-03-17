@@ -344,11 +344,11 @@ try {
         if ($au->sessions !== null) {
             // AU has been attempted.
 
-            if ($au->grade !== null && is_numeric($au->grade) && $austatus !== "Satisfied") {
-                // If numeric grade exists, even if 0, display it.
+            if ($au->grade !== null && is_numeric($au->grade) && ($austatus !== "Satisfied" || $grade > 0)) {
+                // Show grade if it exists, unless AU is satisfied with a 0 (avoid misleading zero display).
                 $auinfo[] = $grade;
             } else {
-                // Grade missing despite attempt, leave blank.
+                // Grade missing, or satisfied with 0 — leave blank.
                 $auinfo[] = " ";
             }
 

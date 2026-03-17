@@ -195,8 +195,9 @@ foreach ($auids as $key => $auid) {
                 }
                 
                 // The users sessions.
+                // Use $cmi5launch->id (activity instance ID), not $id (cm ID) — sessions are stored with the instance ID.
                 $usersession = $DB->get_record('cmi5launch_sessions',
-                    ['sessionid' => $sessionid, 'userid' => $userid, 'moodlecourseid' => $id]);
+                    ['sessionid' => $sessionid, 'userid' => $userid, 'moodlecourseid' => $cmi5launch->id]);
 
                 // Add row data.
                 $rowdata["Attempt"] = get_string('cmi5launchattemptrow', 'cmi5launch') . $attempt;
@@ -232,24 +233,6 @@ foreach ($auids as $key => $auid) {
                     $scorerow[get_string('cmi5launchattemptrow', 'cmi5launch')
                     . $attempt] = is_numeric($usersession->score) ? number_format((float)$usersession->score, 2) : '';
                 }
-                switch ($gradetype) {
-
-                    // GRADE_AUS_CMI5 = 0.
-                    // GRADE_HIGHEST_CMI5 = 1.
-                    // GRADE_AVERAGE_CMI5 =  2.
-                    // GRADE_SUM_CMI5 = 3.
-
-                    case 1:
-                        $grade = get_string('cmi5launchsessiongradehigh', 'cmi5launch');
-                        $overall = max($sessionscores);
-                        break;
-                    case 2:
-                        $grade = get_string('cmi5launchsessiongradeaverage', 'cmi5launch');
-                        $overall = (array_sum($sessionscores) / count($sessionscores));
-                        break;
-                }
-
-                $scorerow["Grading type"] = $grade;
 
                 $attempt++;
 
@@ -266,6 +249,32 @@ foreach ($auids as $key => $auid) {
     } // End else from aurecord if.
 } // End of for each auids.
 
+// Calculate overall grade based on grade type.
+// GRADE_AUS_CMI5 = 0, GRADE_HIGHEST_CMI5 = 1, GRADE_AVERAGE_CMI5 = 2, GRADE_SUM_CMI5 = 3.
+$grade = '';
+$overall = null;
+if (!empty($sessionscores)) {
+    switch ($gradetype) {
+        case 0:
+            $grade = get_string('cmi5launchsessiongradeaus', 'cmi5launch');
+            $overall = end($sessionscores);
+            break;
+        case 1:
+            $grade = get_string('cmi5launchsessiongradehigh', 'cmi5launch');
+            $overall = max($sessionscores);
+            break;
+        case 2:
+            $grade = get_string('cmi5launchsessiongradeaverage', 'cmi5launch');
+            $overall = (array_sum($sessionscores) / count($sessionscores));
+            break;
+        case 3:
+            $grade = get_string('cmi5launchsessiongradesum', 'cmi5launch');
+            $overall = array_sum($sessionscores);
+            break;
+    }
+}
+$scorerow["Grading type"] = $grade;
+
 // Display the grading type, highest, avg, etc.
 $scorecolumns[] = 'Grading type';
 $scoreheaders[] = 'Grading type';
@@ -274,7 +283,6 @@ $scoreheaders[] = 'Overall Score';
 
 // Session score may be null or empty.
 if (!empty($sessionscores)) {
-
     $scorerow["Overall Score"] = isset($overall) && is_numeric($overall) ? number_format((float)$overall, 2) : '';
 } else {
     $scorerow["Overall Score"] = '';

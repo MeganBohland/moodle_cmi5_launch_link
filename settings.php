@@ -32,6 +32,9 @@
 defined(constant_name: 'MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/mod/cmi5launch/constants.php');
+// Required so the updatedcallback functions (e.g. cmi5launch_grade_item_force_regrading)
+// are available when Moodle calls them after saving settings.
+require_once($CFG->dirroot . '/mod/cmi5launch/lib.php');
 
 
 // Class for connecting to CMI5 player grades.
@@ -223,13 +226,17 @@ if ($ADMIN->fulltree) {
 
     // Default grade settings.
     $settings->add(new admin_setting_heading('cmi5launch/gradesettings', get_string('defaultgradesettings', 'cmi5launch'), ''));
-    $settings->add(new admin_setting_configselect(
+    $grademethodsetting = new admin_setting_configselect(
         'cmi5launch/grademethod',
         get_string('grademethod', 'cmi5launch'),
         get_string('grademethoddesc', 'cmi5launch'),
         MOD_CMI5LAUNCH_GRADE_HIGHEST,
         $getgradearray()
-    ));
+    );
+    // When grademethod changes, mark all grade items for recalculation so
+    // Moodle's native gradebook shows updated grades on the next view.
+    $grademethodsetting->set_updatedcallback('cmi5launch_grade_item_force_regrading');
+    $settings->add($grademethodsetting);
 
     for ($i = 0; $i <= 100; $i++) {
         $grades[$i] = "$i";
